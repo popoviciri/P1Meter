@@ -9,7 +9,7 @@ const char* ssid = "SSID";
 const char* password = "SSIDPASSWD";
 const char* hostName = "ESP1_Meter";
 const bool outputOnSerial = false;
-#define SERIAL_RX   5           // pin for SoftwareSerial RX
+#define SERIAL_RX   15           // pin for SoftwareSerial RX
 #define broker_ip   "1.2.3.4"   // IP of MQTT broker
 #define broker_port 8883        // MQTT port 1883 or 8883
 //===Change values to here===
