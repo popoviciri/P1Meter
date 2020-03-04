@@ -23,7 +23,13 @@ float mEAV = 0.0;  //Meter reading Electrics - Actual consumption
 float mEAT = 0.0;  //Meter reading Electrics - Actual return
 float mGAS = 0.0;    //Meter reading Gas
 float prevGAS = 0.0;
-
+//split on three phases
+float mEAVL1 = 0.0;  //Meter reading Electrics - Actual consumption L1
+float mEAVL2 = 0.0;  //Meter reading Electrics - Actual consumption L2
+float mEAVL3 = 0.0;  //Meter reading Electrics - Actual consumption L3
+float mEATL1 = 0.0;  //Meter reading Electrics - Actual return L1
+float mEATL2 = 0.0;  //Meter reading Electrics - Actual return L2
+float mEATL3 = 0.0;  //Meter reading Electrics - Actual return L3
 
 #define MAXLINELENGTH 64 // longest normal line is 47 char (+3 for \r\n\0)
 char telegram[MAXLINELENGTH];
@@ -37,9 +43,21 @@ WiFiClientSecure MQTT_client;
 Adafruit_MQTT_Client mqtt(&MQTT_client, broker_ip, broker_port);
 /****************************** Feeds ***************************************/
 Adafruit_MQTT_Publish meter_raw = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/raw");
+//consumption
 Adafruit_MQTT_Publish meter_mEVLT = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEVLT");
 Adafruit_MQTT_Publish meter_mEVHT = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEVHT");
 Adafruit_MQTT_Publish meter_mEAV = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEAV");
+Adafruit_MQTT_Publish meter_mEAVL1 = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEAVL1");
+Adafruit_MQTT_Publish meter_mEAVL2 = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEAVL2");
+Adafruit_MQTT_Publish meter_mEAVL3 = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEAVL3");
+//return
+Adafruit_MQTT_Publish meter_mEOLT = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEOLT");
+Adafruit_MQTT_Publish meter_mEOHT = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEOHT");
+Adafruit_MQTT_Publish meter_mEAT = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEAT");
+Adafruit_MQTT_Publish meter_mEATL1 = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEATL1");
+Adafruit_MQTT_Publish meter_mEATL2 = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEATL2");
+Adafruit_MQTT_Publish meter_mEATL3 = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEATL3");
+
 Adafruit_MQTT_Publish meter_mGAS = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mGAS");
 
 //##############################################################
@@ -92,10 +110,31 @@ void UpdateElectricity() {
   meter_mEVLT.publish(mEVLT/1000-0.0001);
   meter_mEVHT.publish(mEVHT/1000-0.0001);
   meter_mEAV.publish(mEAV/1000-0.0001);
+  meter_mEAVL1.publish(mEAVL1/1000-0.0001);
+  meter_mEAVL2.publish(mEAVL2/1000-0.0001);
+  meter_mEAVL3.publish(mEAVL3/1000-0.0001);
+
+  meter_mEOLT.publish(mEOLT/1000-0.0001);
+  meter_mEOHT.publish(mEOHT/1000-0.0001);
+  meter_mEAT.publish(mEAT/1000-0.0001);
+  meter_mEATL1.publish(mEATL1/1000-0.0001);
+  meter_mEATL2.publish(mEATL2/1000-0.0001);
+  meter_mEATL3.publish(mEATL3/1000-0.0001);
+
   if(outputOnSerial){
-    Serial.print("Electricity meter LOW tariff: ");Serial.print(mEVLT/1000-0.0001,3);Serial.println(" [kW]");
-    Serial.print("Electricity meter HIGH tariff: ");Serial.print(mEVHT/1000-0.0001,3);Serial.println(" [kW]");
-    Serial.print("Electricity NOW: ");Serial.print(mEAV/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity consumption LOW tariff: ");Serial.print(mEVLT/1000-0.0001,3);Serial.println(" [kW]");
+    Serial.print("Electricity consumption HIGH tariff: ");Serial.print(mEVHT/1000-0.0001,3);Serial.println(" [kW]");
+    Serial.print("Electricity consumption NOW: ");Serial.print(mEAV/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity consumption L1 NOW: ");Serial.print(mEAVL1/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity consumption L2 NOW: ");Serial.print(mEAVL2/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity consumption L3 NOW: ");Serial.print(mEAVL3/1000-0.0001,3);Serial.println(" [kWh]");
+  
+    Serial.print("Electricity return LOW tariff: ");Serial.print(mEOLT/1000-0.0001,3);Serial.println(" [kW]");
+    Serial.print("Electricity return HIGH tariff: ");Serial.print(mEOHT/1000-0.0001,3);Serial.println(" [kW]");
+    Serial.print("Electricity return NOW: ");Serial.print(mEAT/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity return L1 NOW: ");Serial.print(mEATL1/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity return L2 NOW: ");Serial.print(mEATL2/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity return L3 NOW: ");Serial.print(mEATL3/1000-0.0001,3);Serial.println(" [kWh]");
   }
 }
 
@@ -188,7 +227,24 @@ bool decodeTelegram(int len) {
         Serial.print(telegram[cnt]);
     }
   }
-
+/*
+Meter Reading electricity delivered to client (low tariff) in 0,001 kWh1-0:1.8.1.255Use case  3:  Provide  actual meter reads through P1
+Meter Reading electricity delivered to client  (normaltariff) in 0,001 kWh1-0:1.8.2.255Use  case  3:  Provide  actual meter reads through P1
+Meter Reading electricity delivered by client  (lowtariff) in 0,001kWh1-0:2.8.1.255Use case 3: Provide actual meter reads through P1
+Meter Reading electricity delivered by client  (normaltariff) in 0,001 kWh1-0:2.8.2.255Use case 3: Provide actual meter reads through P1
+Actual electricity power delivered (+P) in 1 Watt resolution1-0:1.7.0.255Use case 3: Provide actual meter reads through P1
+Actual electricity power received (-P) in 1 Watt resolution1-0:2.7.0.255Use case 3: Provide actual meter reads through P1
+Instantaneous current L1 1-0:31.7.0.255 Use case 3:Provide actual meter reads through P1
+Instantaneous current L2 1-0:51.7.0.255 Use case 3: Provide actual meter reads through P1
+Instantaneous current L3 1-0:71.7.0.255 Use case 3: Provide actual meter reads through P1
+Instantaneous active power L1 (+P) 1-0:21.7.0.255 Use case 3: Provide actual meter reads through P1
+Instantaneous active power L2 (+P) 1-0:41.7.0.255 Use case 3: Provide actual meter reads through P1
+Instantaneous active power L3 (+P) 1-0:61.7.0.255 Use case 3: Provide actual meter reads through P1
+Instantaneous active power L1 (-P) 1-0:22.7.0.255 Use case 3: Provide actual meter reads through P1
+Instantaneous active power L2 (-P) 1-0:42.7.0.255 Use case 3: Provide actual meter reads through P1
+Instantaneous active power L3 (-P) 1-0:62.7.0.255 Use case 3: Provide actual meter reads through P1
+Last hourly value(temperature con-verted), gas delivered to client in m3, including decimal valuesand capture time0-n:24.2.1.255Use case 3: Provide actual meter reads through P1
+*/
   // 1-0:1.8.1(000992.992*kWh)
   // 1-0:1.8.1 = Elektra verbruik laag tarief (DSMR v4.0)
   if (strncmp(telegram, "1-0:1.8.1", strlen("1-0:1.8.1")) == 0) 
@@ -214,9 +270,28 @@ bool decodeTelegram(int len) {
   // 1-0:1.7.x = Electricity consumption actual usage (DSMR v4.0)
   if (strncmp(telegram, "1-0:1.7.0", strlen("1-0:1.7.0")) == 0) 
     mEAV = getValue(telegram, len);
+  // 1-0:21.7.0.255 Instantaneous active power L1 (+P)
+  if (strncmp(telegram, "1-0:21.7.0", strlen("1-0:21.7.0")) == 0) 
+    mEAVL1 = getValue(telegram, len);
+  // 1-0:41.7.0.255 Instantaneous active power L2 (+P)
+  if (strncmp(telegram, "1-0:41.7.0", strlen("1-0:41.7.0")) == 0) 
+    mEAVL1 = getValue(telegram, len);
+  // 1-0:61.7.0.255 Instantaneous active power L3 (+P)
+  if (strncmp(telegram, "1-0:61.7.0", strlen("1-0:61.7.0")) == 0) 
+    mEAVL1 = getValue(telegram, len);
 
+  // 1-0:2.7.x = Electricity return actual (DSMR v4.0)
   if (strncmp(telegram, "1-0:2.7.0", strlen("1-0:2.7.0")) == 0)
     mEAT = getValue(telegram, len);
+  // 1-0:22.7.0.255 Instantaneous active power L1 (-P)
+  if (strncmp(telegram, "1-0:22.7.0", strlen("1-0:22.7.0")) == 0) 
+    mEATL1 = getValue(telegram, len);
+  // 1-0:42.7.0.255 Instantaneous active power L2 (-P)
+  if (strncmp(telegram, "1-0:42.7.0", strlen("1-0:42.7.0")) == 0) 
+    mEATL1 = getValue(telegram, len);
+  // 1-0:62.7.0.255 Instantaneous active power L3 (-P)
+  if (strncmp(telegram, "1-0:62.7.0", strlen("1-0:62.7.0")) == 0) 
+    mEATL1 = getValue(telegram, len);
 
   // 0-1:24.2.1(150531200000S)(00811.923*m3)
   // 0-1:24.2.1 = Gas (DSMR v4.0) on Kaifa MA105 meter
