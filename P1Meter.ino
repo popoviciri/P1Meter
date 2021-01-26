@@ -1,18 +1,23 @@
-#include <SoftwareSerial.h>
+#include "SoftwareSerial.h"
 #include <ESP8266WiFi.h>
 #include <Adafruit_MQTT.h>
 #include <Adafruit_MQTT_Client.h>
+#include <ArduinoOTA.h>
 #include "CRC16.h"
 
-//===Change values from here===
+/************************* WiFi Access Point *********************************/
 const char* ssid = "SSID";
 const char* password = "SSIDPASSWD";
-const char* hostName = "ESP1_Meter";
+const char* hostName = "esp_meter";
+/************************* WiFi Access Point *********************************/
+#define broker_ip   "10.0.0.4"   // IP of MQTT broker
+#define broker_port 1883         // MQTT port 1883 or 8883
+#define broker_user "user"       // MQTT username
+#define broker_pass "pass"       // MQTT passwd
+/************************* Pinout *********************************/
+#define SERIAL_RX       15
 const bool outputOnSerial = false;
-#define SERIAL_RX   15           // pin for SoftwareSerial RX
-#define broker_ip   "1.2.3.4"   // IP of MQTT broker
-#define broker_port 8883        // MQTT port 1883 or 8883
-//===Change values to here===
+
 
 // Vars to store meter readings
 float mEVLT = 0.0; //Meter reading Electrics - consumption low tariff
@@ -33,14 +38,17 @@ float mEATL3 = 0.0;  //Meter reading Electrics - Actual return L3
 
 #define MAXLINELENGTH 64 // longest normal line is 47 char (+3 for \r\n\0)
 char telegram[MAXLINELENGTH];
-
-SoftwareSerial mySerial(SERIAL_RX, -1, true, MAXLINELENGTH); // (RX, TX. inverted, buffer)
-
 unsigned int currentCRC=0;
 
+SoftwareSerial mySerial(SERIAL_RX, -1, true, MAXLINELENGTH); // (RX, TX. inverted, buffer)
+//updated with new softwareserial lib; see https://github.com/esp8266/Arduino/issues/6737
+//SoftwareSerial mySerial;
+//constexpr SoftwareSerialConfig swSerialConfig = SWSERIAL_8N1;
+//constexpr int IUTBITRATE = 115200;
+
 /************ MQTT WiFi WiFiClient ******************/
-WiFiClientSecure MQTT_client;
-Adafruit_MQTT_Client mqtt(&MQTT_client, broker_ip, broker_port);
+WiFiClient MQTT_client;
+Adafruit_MQTT_Client mqtt(&MQTT_client, broker_ip, broker_port, broker_user, broker_pass);
 /****************************** Feeds ***************************************/
 Adafruit_MQTT_Publish meter_raw = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/raw");
 //consumption
@@ -57,30 +65,39 @@ Adafruit_MQTT_Publish meter_mEAT = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEAT
 Adafruit_MQTT_Publish meter_mEATL1 = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEATL1");
 Adafruit_MQTT_Publish meter_mEATL2 = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEATL2");
 Adafruit_MQTT_Publish meter_mEATL3 = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mEATL3");
-
+//gas
 Adafruit_MQTT_Publish meter_mGAS = Adafruit_MQTT_Publish(&mqtt, "mqtt/feeds/mGAS");
-
 //##############################################################
 void setup() {
   Serial.begin(115200);
+  mySerial.begin(115200);
+//  mySerial.begin (IUTBITRATE, swSerialConfig, SERIAL_RX, -1, true, MAXLINELENGTH);
+
 //  Serial.setDebugOutput(true);
-  delay(500);
+  delay(1000);
   Serial.println("Booting");
 
   setup_wifi();
-  mySerial.begin(115200);
+  setup_ArduinoOTA();
 }
  
 //##############################################################
 void setup_wifi() {
   Serial.println("Connecting to wifi...");
-  WiFi.hostname(hostName);
-  delay(500);
+  WiFi.disconnect() ;
   WiFi.persistent(false);
-  WiFi.setOutputPower(0); 
-  WiFi.mode(WIFI_STA);
+  WiFi.mode(WIFI_STA);            // Client mode
+  //WiFi.setSleepMode(WIFI_NONE_SLEEP);
+  //WiFi.setSleepMode(WIFI_LIGHT_SLEEP);
+  WiFi.setSleepMode(WIFI_MODEM_SLEEP);
+  WiFi.setOutputPower(18);        // 10dBm == 10mW, 14dBm = 25mW, 17dBm = 50mW, 20dBm = 100mW
+  WiFi.begin(ssid, password);     // Start WiFi.
+
+  delay(1000);
+
   if (WiFi.status() != WL_CONNECTED) {
     WiFi.begin(ssid, password);
+    delay(2000);
   }
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Connection Failed! Rebooting...");
@@ -94,6 +111,42 @@ void setup_wifi() {
   Serial.println(WiFi.hostname());
 }
 //##############################################################
+void setup_ArduinoOTA() {
+  ArduinoOTA.setPort(8266);
+  ArduinoOTA.setHostname(hostName);
+  //ArduinoOTA.setPassword((const char *)"qwerty");
+
+  ArduinoOTA.onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH)
+      type = "sketch";
+    else // U_SPIFFS
+      type = "filesystem";
+
+    // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+    Serial.println("Start updating " + type);
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  ArduinoOTA.begin();
+  Serial.println("Ready");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+//##############################################################
+
 
 void UpdateGas() {
   char sValue[10];
@@ -106,35 +159,34 @@ void UpdateGas() {
 
 void UpdateElectricity() {
   char sValue[255];
-  sprintf(sValue, "%f;%f;%f;%f;%f;%f", mEVLT, mEVHT, mEOLT, mEOHT, mEAV, mEAT);
   meter_mEVLT.publish(mEVLT/1000-0.0001);
   meter_mEVHT.publish(mEVHT/1000-0.0001);
-  meter_mEAV.publish(mEAV/1000-0.0001);
-  meter_mEAVL1.publish(mEAVL1/1000-0.0001);
-  meter_mEAVL2.publish(mEAVL2/1000-0.0001);
-  meter_mEAVL3.publish(mEAVL3/1000-0.0001);
+  meter_mEAV.publish(mEAV);
+  meter_mEAVL1.publish(mEAVL1);
+  meter_mEAVL2.publish(mEAVL2);
+  meter_mEAVL3.publish(mEAVL3);
 
   meter_mEOLT.publish(mEOLT/1000-0.0001);
   meter_mEOHT.publish(mEOHT/1000-0.0001);
-  meter_mEAT.publish(mEAT/1000-0.0001);
-  meter_mEATL1.publish(mEATL1/1000-0.0001);
-  meter_mEATL2.publish(mEATL2/1000-0.0001);
-  meter_mEATL3.publish(mEATL3/1000-0.0001);
+  meter_mEAT.publish(mEAT);
+  meter_mEATL1.publish(mEATL1);
+  meter_mEATL2.publish(mEATL2);
+  meter_mEATL3.publish(mEATL3);
 
   if(outputOnSerial){
-    Serial.print("Electricity consumption LOW tariff: ");Serial.print(mEVLT/1000-0.0001,3);Serial.println(" [kW]");
-    Serial.print("Electricity consumption HIGH tariff: ");Serial.print(mEVHT/1000-0.0001,3);Serial.println(" [kW]");
-    Serial.print("Electricity consumption NOW: ");Serial.print(mEAV/1000-0.0001,3);Serial.println(" [kWh]");
-    Serial.print("Electricity consumption L1 NOW: ");Serial.print(mEAVL1/1000-0.0001,3);Serial.println(" [kWh]");
-    Serial.print("Electricity consumption L2 NOW: ");Serial.print(mEAVL2/1000-0.0001,3);Serial.println(" [kWh]");
-    Serial.print("Electricity consumption L3 NOW: ");Serial.print(mEAVL3/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity consumption LOW tariff: ");Serial.print(mEVLT/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity consumption HIGH tariff: ");Serial.print(mEVHT/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity consumption NOW: ");Serial.print(mEAV/1000-0.0001,3);Serial.println(" [W]");
+    Serial.print("Electricity consumption L1 NOW: ");Serial.print(mEAVL1/1000-0.0001,3);Serial.println(" [W]");
+    Serial.print("Electricity consumption L2 NOW: ");Serial.print(mEAVL2/1000-0.0001,3);Serial.println(" [W]");
+    Serial.print("Electricity consumption L3 NOW: ");Serial.print(mEAVL3/1000-0.0001,3);Serial.println(" [W]");
   
-    Serial.print("Electricity return LOW tariff: ");Serial.print(mEOLT/1000-0.0001,3);Serial.println(" [kW]");
-    Serial.print("Electricity return HIGH tariff: ");Serial.print(mEOHT/1000-0.0001,3);Serial.println(" [kW]");
-    Serial.print("Electricity return NOW: ");Serial.print(mEAT/1000-0.0001,3);Serial.println(" [kWh]");
-    Serial.print("Electricity return L1 NOW: ");Serial.print(mEATL1/1000-0.0001,3);Serial.println(" [kWh]");
-    Serial.print("Electricity return L2 NOW: ");Serial.print(mEATL2/1000-0.0001,3);Serial.println(" [kWh]");
-    Serial.print("Electricity return L3 NOW: ");Serial.print(mEATL3/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity return LOW tariff: ");Serial.print(mEOLT/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity return HIGH tariff: ");Serial.print(mEOHT/1000-0.0001,3);Serial.println(" [kWh]");
+    Serial.print("Electricity return NOW: ");Serial.print(mEAT/1000-0.0001,3);Serial.println(" [W]");
+    Serial.print("Electricity return L1 NOW: ");Serial.print(mEATL1/1000-0.0001,3);Serial.println(" [W]");
+    Serial.print("Electricity return L2 NOW: ");Serial.print(mEATL2/1000-0.0001,3);Serial.println(" [W]");
+    Serial.print("Electricity return L3 NOW: ");Serial.print(mEATL3/1000-0.0001,3);Serial.println(" [W]");
   }
 }
 
@@ -275,10 +327,10 @@ Last hourly value(temperature con-verted), gas delivered to client in m3, includ
     mEAVL1 = getValue(telegram, len);
   // 1-0:41.7.0.255 Instantaneous active power L2 (+P)
   if (strncmp(telegram, "1-0:41.7.0", strlen("1-0:41.7.0")) == 0) 
-    mEAVL1 = getValue(telegram, len);
+    mEAVL2 = getValue(telegram, len);
   // 1-0:61.7.0.255 Instantaneous active power L3 (+P)
   if (strncmp(telegram, "1-0:61.7.0", strlen("1-0:61.7.0")) == 0) 
-    mEAVL1 = getValue(telegram, len);
+    mEAVL3 = getValue(telegram, len);
 
   // 1-0:2.7.x = Electricity return actual (DSMR v4.0)
   if (strncmp(telegram, "1-0:2.7.0", strlen("1-0:2.7.0")) == 0)
@@ -288,11 +340,10 @@ Last hourly value(temperature con-verted), gas delivered to client in m3, includ
     mEATL1 = getValue(telegram, len);
   // 1-0:42.7.0.255 Instantaneous active power L2 (-P)
   if (strncmp(telegram, "1-0:42.7.0", strlen("1-0:42.7.0")) == 0) 
-    mEATL1 = getValue(telegram, len);
+    mEATL2 = getValue(telegram, len);
   // 1-0:62.7.0.255 Instantaneous active power L3 (-P)
   if (strncmp(telegram, "1-0:62.7.0", strlen("1-0:62.7.0")) == 0) 
-    mEATL1 = getValue(telegram, len);
-
+    mEATL3 = getValue(telegram, len);
   // 0-1:24.2.1(150531200000S)(00811.923*m3)
   // 0-1:24.2.1 = Gas (DSMR v4.0) on Kaifa MA105 meter
   if (strncmp(telegram, "0-1:24.2.1", strlen("0-1:24.2.1")) == 0) 
@@ -322,6 +373,10 @@ void readTelegram() {
 void loop() {
   MQTT_connect();
   readTelegram();
+//  if (millis() > 600000) {
+//    ESP.restart();
+//  }
+  ArduinoOTA.handle();
 }
 
 //##############################################################
@@ -331,12 +386,12 @@ void MQTT_connect() {
     return;
   }
   Serial.print("Connecting to MQTT... ");
-  uint8_t retries = 3;
+  uint8_t retries = 5;
   while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
        Serial.println(mqtt.connectErrorString(ret));
        Serial.println("Retrying MQTT connection in 5 seconds...");
        mqtt.disconnect();
-       delay(5000);  // wait 5 seconds
+       delay(10000);  // wait 5 seconds
        retries--;
        if (retries == 0) {
          // basically die and wait for WDT to reset me
